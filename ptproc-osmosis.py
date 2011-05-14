@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# OSM Public Transport Processor
+# OSM Public Transport Processor (experimental osm-simple version)
 # See COPYING and AUTHORS for license info
 # -*- coding:utf-8 -*-
 # vim:shiftwidth=2:autoindent:et
@@ -9,6 +9,7 @@ sys.setdefaultencoding("utf-8")          # a hack to support UTF-8
 from time import time
 import re
 import psycopg2
+from psycopg2.extras import register_hstore
 from psycopg2.extensions import adapt
 
 try:
@@ -50,16 +51,20 @@ def sqlesc(value):
     adapted = adapted.getquoted()
   return adapted
 
-pg=psycopg2.connect("dbname='public_transport'")
+pg=psycopg2.connect("dbname='osm_simple'")
 cc=pg.cursor()
-cu=pg.cursor()
+cc2=pg.cursor()
+register_hstore(cc)
+
+pg2=psycopg2.connect("dbname='public_transport'")
+cu=pg2.cursor()
 
 refs = {}
 
 tm=time()
 
 for otype in ["node", "way"]:
-  cc.execute("DELETE FROM pt_%ss" % otype)
+  cu.execute("DELETE FROM pt_%ss" % otype)
 
 # route masters
 rm = {}
@@ -70,15 +75,12 @@ count_rm = 0
 count_rn = 0
 
 # сначала извлечём все route_master
-cc.execute("SELECT id,tags,members FROM %s_rels WHERE 'type=route_master'=ANY(tags2pairs(tags))" % prefix)
+cc.execute("SELECT id,UNNEST(ARRAY_AGG(tags)) AS tags,ARRAY_AGG(LOWER(member_type)||member_id||':'||member_role) AS members FROM relations JOIN relation_members ON id=relation_id WHERE 'type'=>'route_master' <@ tags GROUP BY id")
 while True:
   row = cc.fetchone()
   if not row:
     break
-  id, _tags, members = row
-  tags = {}
-  for i in range(0,len(_tags)/2):
-    tags[_tags[2*i]] = _tags[2*i+1]
+  id, tags, members = row
 
   try:
     rtype = tags["route_master"]
@@ -101,11 +103,12 @@ while True:
     print "%d: new %s route_master %s" % (id,rtype,ref)
 
   count_rm = count_rm+1
-  for i in range(0,len(members)/2):
-    mkey = members[2*i]
+  for i in range(0,len(members)):
+    mtmp = members[i].split(":")
+    mkey = mtmp[0]
     mid = int(mkey[1:])
     mtype = mkey[0]
-    mrole = members[2*i+1]
+    mrole = ":".join(mtmp[1:])
     if mtype == "r":
       try:
         rm[mid]
@@ -132,15 +135,19 @@ count_r = 0
 count_o = 0
 
 # извлекаем все route
-cc.execute("SELECT id,tags,members FROM %s_rels WHERE 'type=route'=ANY(tags2pairs(tags))" % prefix)
+# одним запросом получается неэффективно, поэтому members извлекаем отдельными запросами
+#cc.execute("SELECT id,UNNEST(ARRAY_AGG(tags)) AS tags,ARRAY_AGG(LOWER(member_type)||member_id||':'||member_role) AS members FROM relations JOIN relation_members ON id=relation_id WHERE 'type'=>'route' <@ tags GROUP BY id")
+cc.execute("SELECT id,UNNEST(ARRAY_AGG(tags)) AS tags FROM relations WHERE 'type'=>'route' <@ tags GROUP BY id")
 while True:
   row = cc.fetchone()
   if not row:
     break
-  id, _tags, members = row
-  tags = {}
-  for i in range(0,len(_tags)/2):
-    tags[_tags[2*i]] = _tags[2*i+1]
+  id, tags = row
+  cc2.execute("SELECT ARRAY_AGG(LOWER(member_type)||member_id||':'||member_role) AS members FROM relation_members WHERE relation_id=%d" % id)
+  row = cc2.fetchone()
+  if not row:
+    continue
+  members, = row
 
   # если route является частью какого-то route_master, то он новый
   try:
@@ -178,11 +185,12 @@ while True:
   else:
     count_o = count_o+1
 
-  for i in range(0,len(members)/2):
-    mkey = members[2*i]
+  for i in range(0,len(members)):
+    mtmp = members[i].split(":")
+    mkey = mtmp[0]
     mid = int(mkey[1:])
-    mtype = mkey[0] # n = node, w = way, r = relation
-    mrole = members[2*i+1]
+    mtype = mkey[0]
+    mrole = ":".join(mtmp[1:])
     if mtype == "n":
       ptype = "stop"
     elif mtype == "w":

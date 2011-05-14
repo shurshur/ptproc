@@ -1,0 +1,15 @@
+Quick HOWTO. Now for experts only.
+
+1. Requires: postgresql, postgis, osm2pgql, python, psycopg2.
+
+2. Setup PostGIS database. Apply ptproc.sql.
+
+3. Load OSM data into database using osm2pgsql.
+
+4. Run ptproc.py.
+
+Script fills tables pt_nodes and pt_ways in one transaction and doesn't touch
+any other tables.
+
+You may also use experimental version ptproc-osmosis.py that works with
+osmosis osm-simple schema.
