@@ -1,8 +1,8 @@
 #!/usr/bin/python
-# OSM Public Transport Processor
-# See COPYING and AUTHORS for license info
 # -*- coding:utf-8 -*-
 # vim:shiftwidth=2:autoindent:et
+# OSM Public Transport Processor
+# See COPYING and AUTHORS for license info
 import sys
 reload(sys)
 sys.setdefaultencoding("utf-8")          # a hack to support UTF-8 
@@ -17,10 +17,30 @@ try:
 except ImportError:
   pass
 
+# possible values: pgsql, osm-simple
+pgtype = 'osm-simple'
+
+# PostGIS database with OSM data
+pguser = None
+pgpass = None
+pgdata = 'osm-simple'
+pghost = None
+
+# Target database for pt_*. If ptdata=None, script will use pgdata instead. 
+ptuser = None
+ptpass = None
+ptdata = None
+pthost = None
+
 debug = 0
 warns = 0
+
 route_types = ["bus", "trolleybus", "tram", "share_taxi"]
 old_stop_roles = ["stop", "forward:stop", "backward:stop", "forward_stop", "backward_stop"]
+new_stop_roles = ["stop", "stop_exit_only", "stop_entry_only" ]
+new_platform_roles = ["platform", "platform_exit_only", "platform_entry_only" ]
+
+# only for pgtype=pgsql
 prefix = "planet"
 
 # сравнение двух номеров маршрутов
@@ -50,16 +70,36 @@ def sqlesc(value):
     adapted = adapted.getquoted()
   return adapted
 
-pg=psycopg2.connect("dbname='public_transport'")
+def pgconn(_host,_user,_pass,_data):
+  if not _data:
+    return pgconn(pghost,pguser,pgpass,pgdata)
+  conn = "dbname='%s'" % _data
+  if _host:
+    conn = conn + " host='%s'" % _host
+  if _user:
+    conn = conn + " user='%s'" % _user
+  if _pass:
+    conn = conn + " password='%s'" % _pass
+  return psycopg2.connect(conn)
+
+if pgtype == 'osm-simple':
+  from psycopg2.extras import register_hstore
+
+pg = pgconn(pghost,pguser,pgpass,pgdata)
 cc=pg.cursor()
-cu=pg.cursor()
+cc2=pg.cursor()
+if pgtype == 'osm-simple':
+  register_hstore(cc)
+
+pg2=pgconn(pthost,ptuser,ptpass,ptdata)
+cu=pg2.cursor()
 
 refs = {}
 
 tm=time()
 
 for otype in ["node", "way"]:
-  cc.execute("DELETE FROM pt_%ss" % otype)
+  cu.execute("DELETE FROM pt_%ss" % otype)
 
 # route masters
 rm = {}
@@ -70,15 +110,33 @@ count_rm = 0
 count_rn = 0
 
 # сначала извлечём все route_master
-cc.execute("SELECT id,tags,members FROM %s_rels WHERE 'type=route_master'=ANY(tags2pairs(tags))" % prefix)
+if pgtype == 'pgsql':
+  q="SELECT id,tags,members FROM %s_rels WHERE 'type=route_master'=ANY(tags2pairs(tags))" % prefix
+elif pgtype == 'osm-simple':
+  q="SELECT id,UNNEST(ARRAY_AGG(tags)) AS tags,ARRAY_AGG(LOWER(member_type)||member_id||':'||member_role) AS members FROM relations JOIN relation_members ON id=relation_id WHERE 'type'=>'route_master' <@ tags GROUP BY id"
+else:
+  raise ArgumentError("invalid pgtype")
+
+cc.execute(q)
+
 while True:
   row = cc.fetchone()
   if not row:
     break
-  id, _tags, members = row
-  tags = {}
-  for i in range(0,len(_tags)/2):
-    tags[_tags[2*i]] = _tags[2*i+1]
+  if pgtype == 'pgsql':
+    id, _tags, members = row
+    tags = {}
+    for i in range(0,len(_tags)/2):
+      tags[_tags[2*i]] = _tags[2*i+1]
+  elif pgtype == 'osm-simple':
+    id, tags, _members = row
+    members = {}
+    for i in range(0,len(_members)):
+      mtmp = _members[i].split(":")
+      mkey = mtmp[0]
+      mrole = ":".join(mtmp[1:])
+      members[2*i] = mkey
+      members[2*i+1] = mrole
 
   try:
     rtype = tags["route_master"]
@@ -132,15 +190,40 @@ count_r = 0
 count_o = 0
 
 # извлекаем все route
-cc.execute("SELECT id,tags,members FROM %s_rels WHERE 'type=route'=ANY(tags2pairs(tags))" % prefix)
+if pgtype == 'pgsql':
+  q = "SELECT id,tags,members FROM %s_rels WHERE 'type=route'=ANY(tags2pairs(tags))" % prefix
+elif pgtype == 'osm-simple':
+  # одним запросом получается неэффективно, поэтому members извлекаем отдельными запросами
+  #q="SELECT id,UNNEST(ARRAY_AGG(tags)) AS tags,ARRAY_AGG(LOWER(member_type)||member_id||':'||member_role) AS members FROM relations JOIN relation_members ON id=relation_id WHERE 'type'=>'route' <@ tags GROUP BY id"
+  q="SELECT id,UNNEST(ARRAY_AGG(tags)) AS tags FROM relations WHERE 'type'=>'route' <@ tags GROUP BY id"
+
+cc.execute(q)
+
 while True:
   row = cc.fetchone()
   if not row:
     break
-  id, _tags, members = row
-  tags = {}
-  for i in range(0,len(_tags)/2):
-    tags[_tags[2*i]] = _tags[2*i+1]
+  if pgtype == 'pgsql':
+    id, _tags, members = row
+    tags = {}
+    for i in range(0,len(_tags)/2):
+      tags[_tags[2*i]] = _tags[2*i+1]
+  elif pgtype == 'osm-simple':
+    id, tags = row
+    cc2.execute("SELECT ARRAY_AGG(LOWER(member_type)||member_id||':'||member_role) AS members FROM relation_members WHERE relation_id=%d" % id)
+    row = cc2.fetchone()
+    if not row:
+      continue
+    _members, = row
+    members = {}
+    if not _members:
+      _members = {}
+    for i in range(0,len(_members)):
+      mtmp = _members[i].split(":")
+      mkey = mtmp[0]
+      mrole = ":".join(mtmp[1:])
+      members[2*i] = mkey
+      members[2*i+1] = mrole
 
   # если route является частью какого-то route_master, то он новый
   try:
@@ -166,7 +249,7 @@ while True:
     else:
       continue
 
-  if not members:
+  if not members or not len(members):
     if warns > 0:
       print "Warning: route relation %d has no members" % id
     continue
@@ -187,8 +270,8 @@ while True:
       ptype = "stop"
     elif mtype == "w":
       ptype = "way"
-    # для новых маршрутов остановка должна иметь роль platform, для старых - одну из old_stop_roles
-    if (mtype == "n" and (not new and (mrole in old_stop_roles)) or (new and (mrole == "platform"))) or mtype == "w":
+    # для новых маршрутов остановка должна одну из ролей new_platform_roles, для старых - одну из old_stop_roles
+    if (mtype == "n" and (not new and (mrole in old_stop_roles)) or (new and (mrole in new_platform_roles))) or mtype == "w":
       if debug > 0:
         print "%d: new %s %d on %s route %s" % (id, otype, mid, rtype, ref)
       try:
@@ -210,7 +293,7 @@ while True:
       refs[mkey][rtype] = oref
     elif mtype == "n":
       if warns > 0:
-        if not (new and mrole == "stop"):
+        if not (new and (mrole in new_stop_roles)):
           print "Warning: route relation %d has non-stop node %d (new=%d, role=%s)" % (id, mid, new, mrole)
     elif mtype == "w" and new and mrole != "":
       if warns > 0:
