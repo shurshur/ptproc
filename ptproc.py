@@ -18,12 +18,12 @@ except ImportError:
   pass
 
 # possible values: pgsql, osm-simple
-pgtype = 'osm-simple'
+pgtype = 'pgsql'
 
 # PostGIS database with OSM data
 pguser = None
 pgpass = None
-pgdata = 'osm-simple'
+pgdata = 'public_transport'
 pghost = None
 
 # Target database for pt_*. If ptdata=None, script will use pgdata instead. 
