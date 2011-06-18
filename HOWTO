@@ -1,4 +1,4 @@
-Quick HOWTO. Now for experts only.
+Quick HOWTO.
 
 1. Requires: postgresql, postgis, osm2pgsql, python, psycopg2.
 
