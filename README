@@ -1,4 +1,4 @@
 ptproc is OSM Public Transport Processor
 
-ptproc is used by latlon.org to preprocess the transportation routes and to show
-them on the map using Mapnik.
+ptproc is used by http://latlon.org to preprocess the transportation routes and to show
+them on the map with Mapnik.
