@@ -341,7 +341,7 @@ for mkey in refs.keys():
       qr = 0
     #print "%d inserts completed at %d seconds, %.2ld queries/sec" % (up, tmd, qr)
 
-pg.commit()
+pg2.commit()
 
 #print "Inserts: %d" % up
 print "Database update time elapsed: %d seconds" % (time()-tm)
