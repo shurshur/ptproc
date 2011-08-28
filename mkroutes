@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# Extract routes from planet OSM file
+# Requires osmfilter plugin by Sergey Astakhov (osmfilter-1.1.jar)
+#
+
+file=planet-latest.osm.pbf
+osmosis \
+  --read-pbf file=$file \
+  --tag-filter accept-relations route=bus,trolleybus,tram,share_taxi \
+  --uwn usedByTag=false \
+  outPipe.0=classic_routes \
+  \
+  --read-pbf file=$file \
+  --tag-filter accept-relations "public_transport=*" \
+  --uwn usedByTag=false \
+  outPipe.0=public_transport \
+  \
+  --read-pbf file=$file \
+  --tag-filter accept-relations route_master=bus,trolleybus,tram,share_taxi \
+  --uwn usedByTag=false \
+  outPipe.0=route_master \
+  \
+  --merge \
+    inPipe.0=public_transport \
+    inPipe.1=route_master \
+    outPipe.0=new_routes \
+  \
+  --merge \
+    inPipe.0=classic_routes \
+    inPipe.1=new_routes \
+  --wx file="-"|
+  bzip2 > planet_routes.osm.bz2
