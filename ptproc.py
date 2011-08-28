@@ -266,10 +266,6 @@ while True:
     mid = int(mkey[1:])
     mtype = mkey[0] # n = node, w = way, r = relation
     mrole = members[2*i+1]
-    if mtype == "n":
-      ptype = "stop"
-    elif mtype == "w":
-      ptype = "way"
     # для новых маршрутов остановка должна одну из ролей new_platform_roles, для старых - одну из old_stop_roles
     if (mtype == "n" and (not new and (mrole in old_stop_roles)) or (new and (mrole in new_platform_roles))) or mtype == "w":
       if debug > 0:
