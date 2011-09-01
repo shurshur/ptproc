@@ -338,7 +338,7 @@ while True:
     if pgtype == 'pgsql':
       q = "SELECT id, nodes FROM %s_ways WHERE id IN (%s)" % (prefix, ",".join(ways))
     elif pgtype == 'osm-simple':
-      raise BaseException("not implemented yet")
+      q = "SELECT MIN(way_id), ARRAY_AGG(node_id) FROM way_nodes WHERE way_id IN (%s) GROUP BY way_id" % (",".join(ways))
     cc2.execute(q)
     waynodes = {}
     while True:
