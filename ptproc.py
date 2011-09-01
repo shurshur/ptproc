@@ -34,6 +34,10 @@ pthost = None
 
 debug = 0
 warns = 0
+# check if route is valid (new routes only)
+checkvalid = 0
+# store new routes summary in pt_routes table
+storeroutes = 0
 
 route_types = ["bus", "trolleybus", "tram", "share_taxi"]
 old_stop_roles = ["stop", "forward:stop", "backward:stop", "forward_stop", "backward_stop"]
@@ -100,6 +104,9 @@ tm=time()
 
 for otype in ["node", "way"]:
   cu.execute("DELETE FROM pt_%ss" % otype)
+
+if storeroutes:
+  cu.execute("DELETE FROM pt_routes")
 
 # route masters
 rm = {}
@@ -228,6 +235,7 @@ while True:
   # если route является частью какого-то route_master, то он новый
   try:
     rm[id]
+    master = rm[id]["master"]
     new = 1
   except:
     new = 0
@@ -240,12 +248,16 @@ while True:
   if rtype not in route_types:
     continue
 
+  if new:
+    mref = rm[id]["ref"]
   # если ref не указан, то для новых маршрутов возьмём его из route_master
   try:
     ref = tags["ref"]
+    tref = ref
   except KeyError:
+    tref = "(null)"
     if new:
-      ref = rm[id]["ref"]
+      ref = mref
     else:
       continue
 
@@ -261,11 +273,24 @@ while True:
   else:
     count_o = count_o+1
 
+  # assume route is valid if checking is off
+  valid = 1
+  if checkvalid:
+    ways = []
+    n0 = 0
+    n1 = 0
+    n2 = 0
+    rwarns = []
+
   for i in range(0,len(members)/2):
     mkey = members[2*i]
     mid = int(mkey[1:])
     mtype = mkey[0] # n = node, w = way, r = relation
     mrole = members[2*i+1]
+
+    if checkvalid and mtype == "w" and new:
+      ways.append(str(mid))
+
     # для новых маршрутов остановка должна одну из ролей new_platform_roles, для старых - одну из old_stop_roles
     if (mtype == "n" and (not new and (mrole in old_stop_roles)) or (new and (mrole in new_platform_roles))) or mtype == "w":
       if debug > 0:
@@ -288,17 +313,82 @@ while True:
           oref = ", ".join(lref)
       refs[mkey][rtype] = oref
     elif mtype == "n":
-      if warns > 0:
-        if not (new and (mrole in new_stop_roles)):
+      if not (new and (mrole in new_stop_roles)):
+        if checkvalid:
+          if new:
+            rwarns.append("Non-stop node %d (role=\"%s\") in new route relation %d" % (mid, mrole, id))
+          else:
+            rwarns.append("Non-stop node %d (role=\"%s\") in old route relation %d" % (mid, mrole, id))
+        if warns > 0:
           print "Warning: route relation %d has non-stop node %d (new=%d, role=%s)" % (id, mid, new, mrole)
     elif mtype == "w" and new and mrole != "":
+      if checkvalid:
+        rwarns.append("Non-empty role for way %d (role=\"%s\") in new route relation %d" % (mid, mrole, id))
       if warns > 0:
         print "Warning: route relation %d is new and has non-empty role %s for way %d" % (id, mrole, mid)
     elif mtype == "r":
+      if checkvalid:
+        rwarns.append("Relation member %d (role=\"%s\") in route relation %d" % (mid, mrole, id))
       if warns > 0:
         print "Warning: route relation %d has relation member %d" % (id, mid)
     else:
       raise BaseException("This cannot happen!")
+
+  if checkvalid and new and len(ways):
+    if pgtype == 'pgsql':
+      q = "SELECT id, nodes FROM %s_ways WHERE id IN (%s)" % (prefix, ",".join(ways))
+    elif pgtype == 'osm-simple':
+      raise BaseException("not implemented yet")
+    cc2.execute(q)
+    waynodes = {}
+    while True:
+      row = cc2.fetchone()
+      if not row:
+        break
+      wid, nodes = row
+      waynodes[str(wid)] = nodes
+
+    cnt = 0
+    for wid in ways:
+      nodes = waynodes[wid]
+      if not n0:
+        n0 = nodes[0]
+        n1 = nodes[-1]
+        n2 = 0
+      elif not n2:
+        if n0 == nodes[0] or n1 == nodes[0]:
+          n0 = nodes[-1]
+        elif n0 == nodes[-1] or n1 == nodes[-1]:
+          n0 = nodes[0]
+        else:
+          if warns > 0:
+            print "Warning: discontinuity between ways %s and %s at route relation %d" % (wid,ways[cnt-1],id)
+          rwarns.append("Discontinuity between ways %s and %s" % (wid,ways[cnt-1]))
+          valid = 0
+          n0 = nodes[0]
+          n1 = nodes[-1]
+          n2 = 0
+      else:
+        if n0 == nodes[0]:
+          n0 = nodes[-1]
+        elif n0 == nodes[-1]:
+          n0 = nodes[0]
+        else:
+          if warns > 0:
+            print "Warning: discontinuity between ways %s and %s at route relation %d" % (wid,ways[cnt-1],id)
+          rwarns.append("Discontinuity between ways %s and %s" % (wid,ways[cnt-1]))
+          valid = 0
+          n0 = nodes[0]
+          n1 = nodes[-1]
+          n2 = 0
+      cnt = cnt + 1
+  if new and storeroutes:
+    if checkvalid:
+      rwarns = "\n".join(rwarns)
+    else:
+      rwarns = ""
+    q = "INSERT INTO pt_routes (master_id, route_id, route, ref, rref, mref, valid, warns) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s)" % (master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns))
+    cu.execute(q)
 
 print "routes: %d new routes and %d old routes" % (count_r, count_o)
 print "pt objects: %d" % len(refs)
