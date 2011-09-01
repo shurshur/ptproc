@@ -44,6 +44,9 @@ old_stop_roles = ["stop", "forward:stop", "backward:stop", "forward_stop", "back
 new_stop_roles = ["stop", "stop_exit_only", "stop_entry_only" ]
 new_platform_roles = ["platform", "platform_exit_only", "platform_entry_only" ]
 
+# prefix for pt tables
+ptprefix = "pt"
+
 # only for pgtype=pgsql
 prefix = "planet"
 
@@ -103,10 +106,10 @@ refs = {}
 tm=time()
 
 for otype in ["node", "way"]:
-  cu.execute("DELETE FROM pt_%ss" % otype)
+  cu.execute("DELETE FROM %s_%ss" % (ptprefix, otype))
 
 if storeroutes:
-  cu.execute("DELETE FROM pt_routes")
+  cu.execute("DELETE FROM %s_routes" % (ptprefix))
 
 # route masters
 rm = {}
@@ -315,6 +318,7 @@ while True:
     elif mtype == "n":
       if not (new and (mrole in new_stop_roles)):
         if checkvalid:
+          valid = 0
           if new:
             rwarns.append("Non-stop node %d (role=\"%s\") in new route relation %d" % (mid, mrole, id))
           else:
@@ -323,11 +327,13 @@ while True:
           print "Warning: route relation %d has non-stop node %d (new=%d, role=%s)" % (id, mid, new, mrole)
     elif mtype == "w" and new and mrole != "":
       if checkvalid:
+        valid = 0
         rwarns.append("Non-empty role for way %d (role=\"%s\") in new route relation %d" % (mid, mrole, id))
       if warns > 0:
         print "Warning: route relation %d is new and has non-empty role %s for way %d" % (id, mrole, mid)
     elif mtype == "r":
       if checkvalid:
+        valid = 0
         rwarns.append("Relation member %d (role=\"%s\") in route relation %d" % (mid, mrole, id))
       if warns > 0:
         print "Warning: route relation %d has relation member %d" % (id, mid)
@@ -387,7 +393,7 @@ while True:
       rwarns = "\n".join(rwarns)
     else:
       rwarns = ""
-    q = "INSERT INTO pt_routes (master_id, route_id, route, ref, rref, mref, valid, warns) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s)" % (master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns))
+    q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns))
     cu.execute(q)
 
 print "routes: %d new routes and %d old routes" % (count_r, count_o)
@@ -417,7 +423,7 @@ for mkey in refs.keys():
     v.append(sqlesc(oref))
   k = ",".join(k)
   v = ",".join(v)
-  cu.execute("INSERT INTO pt_%ss (%s) VALUES (%s)" % (otype, k, v))
+  cu.execute("INSERT INTO %s_%ss (%s) VALUES (%s)" % (ptprefix, otype, k, v))
   up = up+1
   if up % 10000 == 0:
     tmd = time()-tm
