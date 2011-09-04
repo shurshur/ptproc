@@ -15,3 +15,4 @@ CREATE OR REPLACE FUNCTION tags2pairs(a text[]) RETURNS text[] AS $SQL$
     FROM generate_series(1, array_upper($1,1)) i
     WHERE i % 2 = 1
 $SQL$ LANGUAGE sql;
+ALTER TABLE pt_routes ADD way GEOMETRY;
