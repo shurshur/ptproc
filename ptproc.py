@@ -17,40 +17,12 @@ try:
 except ImportError:
   pass
 
-# possible values: pgsql, osm-simple
-pgtype = 'pgsql'
-
-# PostGIS database with OSM data
-pguser = None
-pgpass = None
-pgdata = 'public_transport'
-pghost = None
-
-# Target database for pt_*. If ptdata=None, script will use pgdata instead. 
-ptuser = None
-ptpass = None
-ptdata = None
-pthost = None
-
-debug = 0
-warns = 0
-# check if route is valid (new routes only)
-checkvalid = 0
-# store new routes summary in pt_routes table
-storeroutes = 0
-# create geometry for routes in pt_routes table (requires storeroutes=1)
-georoutes = 1
+from config import *
 
 route_types = ["bus", "trolleybus", "tram", "share_taxi"]
 old_stop_roles = ["stop", "forward:stop", "backward:stop", "forward_stop", "backward_stop"]
 new_stop_roles = ["stop", "stop_exit_only", "stop_entry_only" ]
 new_platform_roles = ["platform", "platform_exit_only", "platform_entry_only" ]
-
-# prefix for pt tables
-ptprefix = "pt"
-
-# only for pgtype=pgsql
-prefix = "planet"
 
 # сравнение двух номеров маршрутов
 # сравниваются префиксы как числа, или как строки, а если равны -
