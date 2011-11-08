@@ -161,6 +161,8 @@ while True:
       try:
         rm[mid]
       except KeyError:
+        if debug > 0:
+          print "%d: new route_master's member %d" % (id, mid)
         rm[mid] = {}
         rm[mid]["ref"] = ref
         rm[mid]["master"] = id
@@ -218,15 +220,6 @@ while True:
       members[2*i] = mkey
       members[2*i+1] = mrole
 
-  # если route является частью какого-то route_master, то он новый
-  try:
-    rm[id]
-    master = rm[id]["master"]
-    new = 1
-  except:
-    new = 0
-    pass
-
   try:
     rtype = tags["route"]
   except KeyError:
@@ -234,7 +227,25 @@ while True:
   if rtype not in route_types:
     continue
 
-  if new:
+  # если route является частью какого-то route_master, то он новый
+  try:
+    rm[id]
+    master = rm[id]["master"]
+    new = 1
+  except:
+    master = None
+    new = 0
+    pass
+  # если route имеет хоть один platform, то он новый
+  if not new:
+    for i in new_platform_roles:
+      if i in members.values()[1::2]:
+        #if debug > 0:
+        print "id=%d is new because platform found" % id
+        new = 1
+        break
+
+  if new and master:
     mref = rm[id]["ref"]
   # если ref не указан, то для новых маршрутов возьмём его из route_master
   try:
@@ -242,7 +253,7 @@ while True:
     tref = ref
   except KeyError:
     tref = "(null)"
-    if new:
+    if new and master:
       ref = mref
     else:
       continue
