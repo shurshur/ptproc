@@ -210,9 +210,9 @@ while True:
     if not row:
       continue
     _members, = row
-    members = {}
+    members = []
     if not _members:
-      _members = {}
+      _members = []
     for i in range(0,len(_members)):
       mtmp = _members[i].split(":")
       mkey = mtmp[0]
@@ -239,9 +239,9 @@ while True:
   # если route имеет хоть один platform, то он новый
   if not new:
     for i in new_platform_roles:
-      if i in members.values()[1::2]:
-        #if debug > 0:
-        print "id=%d is new because platform found" % id
+      if i in members[1::2]:
+        if debug > 0:
+          print "id=%d is new because platform found" % id
         new = 1
         break
 
@@ -337,7 +337,7 @@ while True:
   if georoutes and checkvalid and new and len(ways):
     if pgtype == 'pgsql':
       q = "SELECT ST_AsText(way),ST_SRID(way) FROM %s_line WHERE osm_id IN (%s)" % (prefix, ",".join(ways))
-      q = q + "UNION "
+      q = q + " UNION "
       q = q + "SELECT ST_AsText(way),ST_SRID(way) FROM %s_polygon WHERE osm_id IN (%s)" % (prefix, ",".join(ways))
     elif pgtype == 'osm-simple':
       q = "SELECT ST_AsText(linestring),ST_SRID(linestring) FROM ways WHERE id IN (%s)" % (",".join(ways))
@@ -404,26 +404,37 @@ while True:
           n1 = nodes[-1]
           n2 = 0
       cnt = cnt + 1
-  if new and storeroutes and len(ways):
-    if georoutes and geom:
+
+  if storeroutes:
+    q = None
+    if georoutes and len(ways) and geom and new:
       try:
         geom = towkt(geom)
         geom = "ST_GeomFromText('%s',%d)" % (geom, srid)
-        if checkvalid:
-          rwarns = "\n".join(rwarns)
-        else:
-          rwarns = ""
-        q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s,%s)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns), geom)
       except TypeError:
         print "Something wrong while processing geometry for master_id=%s route_id=%s; resetting geometry to NULL" % (master, id)
         rwarns.append("Something wrong while processing geometry; resetting geometry to NULL")
         geom = None
-    if not georoutes or not geom:
       if checkvalid:
         rwarns = "\n".join(rwarns)
       else:
         rwarns = ""
-      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns))
+      if not master:
+        master = id
+        mref = ""
+      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s,%s,%d)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns), geom, new)
+    
+    # old route or route without geometry
+    if not q:
+      if checkvalid:
+        rwarns = "\n".join(rwarns)
+      else:
+        rwarns = ""
+      if not master:
+        master = id
+        mref = ""
+      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, newroute) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s,%d)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns), new)
+    
     cu.execute(q)
 
 print "routes: %d new routes and %d old routes" % (count_r, count_o)

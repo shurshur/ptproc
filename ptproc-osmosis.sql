@@ -11,3 +11,4 @@ CREATE TABLE pt_routes (
   warns TEXT
 );
 ALTER TABLE pt_routes ADD way GEOMETRY;
+ALTER TABLE pt_routes ADD newroute INT NOT NULL DEFAULT 0;
