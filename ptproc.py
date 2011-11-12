@@ -285,7 +285,7 @@ while True:
     mtype = mkey[0] # n = node, w = way, r = relation
     mrole = members[2*i+1]
 
-    if checkvalid and mtype == "w" and new:
+    if checkvalid and mtype == "w":
       ways.append(str(mid))
 
     # для новых маршрутов остановка должна одну из ролей new_platform_roles, для старых - одну из old_stop_roles
@@ -334,7 +334,7 @@ while True:
     else:
       raise BaseException("This cannot happen!")
 
-  if georoutes and checkvalid and new and len(ways):
+  if georoutes and checkvalid and len(ways):
     if pgtype == 'pgsql':
       q = "SELECT ST_AsText(way),ST_SRID(way) FROM %s_line WHERE osm_id IN (%s)" % (prefix, ",".join(ways))
       q = q + " UNION "
@@ -407,7 +407,7 @@ while True:
 
   if storeroutes:
     q = None
-    if georoutes and len(ways) and geom and new:
+    if georoutes and len(ways) and geom:
       try:
         geom = towkt(geom)
         geom = "ST_GeomFromText('%s',%d)" % (geom, srid)
@@ -420,7 +420,7 @@ while True:
       else:
         rwarns = ""
       if not master:
-        master = id
+        master = 0
         mref = ""
       q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s,%s,%d)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns), geom, new)
     
@@ -431,7 +431,7 @@ while True:
       else:
         rwarns = ""
       if not master:
-        master = id
+        master = 0
         mref = ""
       q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, newroute) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s,%d)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns), new)
     
