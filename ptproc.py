@@ -217,8 +217,8 @@ while True:
       mtmp = _members[i].split(":")
       mkey = mtmp[0]
       mrole = ":".join(mtmp[1:])
-      members[2*i] = mkey
-      members[2*i+1] = mrole
+      members.append(mkey)
+      members.append(mrole)
 
   try:
     rtype = tags["route"]
@@ -348,10 +348,20 @@ while True:
       if not row:
         break
       wkt, srid = row
+      if not srid:
+        if warns > 0:
+          print "Way id=%d geometry is invalid, try fix it" % osm_id
+        rwarns.append("Way id=%d geometry is invalid, try fix it" % osm_id)
+        continue
+      try:
+        wayg = fromwkt(wkt)
+      except RuntimeError:
+        print "Error create geom, skipping way: osm_id=%d, wkt=%s, srid=%d" % (osm_id, wkt, srid)
+        continue
       if not geom:
-        geom = fromwkt(wkt)
+        geom = wayg
       else:
-        geom = geom.union(fromwkt(wkt))
+        geom = geom.union(wayg)
     #print "ref=%s geom=%s" % (ref, towkt(geom))
     #geom = geom.lineMerge()
     #print "ref=%s type=%s geom=%s" % (ref, geom.geomType(), towkt(geom))
@@ -372,7 +382,13 @@ while True:
 
     cnt = 0
     for wid in ways:
-      nodes = waynodes[wid]
+      try:
+        nodes = waynodes[wid]
+      except KeyError:
+        if warns > 0:
+          print "Oops! No waynodes for way %s in route %d!" % (wid, id)
+        rwarns.append("Oops! No waynodes for way %s!" % (wid))
+        continue
       if not n0:
         n0 = nodes[0]
         n1 = nodes[-1]
@@ -422,7 +438,7 @@ while True:
       if not master:
         master = 0
         mref = ""
-      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s,%s,%d)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns), geom, new)
+      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%s,%d)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), geom, new)
     
     # old route or route without geometry
     if not q:
@@ -433,7 +449,7 @@ while True:
       if not master:
         master = 0
         mref = ""
-      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, newroute) VALUES (%s,%s,'%s','%s','%s','%s',%d,%s,%d)" % (ptprefix, master, id, rtype, ref, mref, tref, valid, sqlesc(rwarns), new)
+      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, newroute) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%d)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), new)
     
     cu.execute(q)
 
