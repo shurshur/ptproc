@@ -69,11 +69,6 @@ if pgtype == 'osm-simple':
 if georoutes:
   if not storeroutes:
     raise BaseException("georoutes=1 requires storeroutes=1")
-  import geos
-  reader = geos.WktReader()
-  fromwkt = reader.read
-  writer = geos.WktWriter()
-  towkt = writer.write
 
 pg = pgconn(pghost,pguser,pgpass,pgdata)
 cc=pg.cursor()
@@ -272,8 +267,9 @@ while True:
 
   # assume route is valid if checking is off
   valid = 1
-  if checkvalid:
+  if checkvalid or georoutes:
     ways = []
+  if checkvalid:
     n0 = 0
     n1 = 0
     n2 = 0
@@ -285,7 +281,7 @@ while True:
     mtype = mkey[0] # n = node, w = way, r = relation
     mrole = members[2*i+1]
 
-    if checkvalid and mtype == "w":
+    if (checkvalid or georoutes) and mtype == "w":
       ways.append(str(mid))
 
     # для новых маршрутов остановка должна одну из ролей new_platform_roles, для старых - одну из old_stop_roles
@@ -334,37 +330,27 @@ while True:
     else:
       raise BaseException("This cannot happen!")
 
-  if georoutes and checkvalid and len(ways):
+  if georoutes and len(ways):
     if pgtype == 'pgsql':
-      q = "SELECT ST_AsText(way),ST_SRID(way) FROM %s_line WHERE osm_id IN (%s)" % (prefix, ",".join(ways))
+      q = "SELECT ST_AsText(ST_Multi(ST_Collect(way))),MAX(ST_SRID(way)) FROM %s_line WHERE osm_id IN (%s)" % (prefix, ",".join(ways))
       q = q + " UNION "
-      q = q + "SELECT ST_AsText(way),ST_SRID(way) FROM %s_polygon WHERE osm_id IN (%s)" % (prefix, ",".join(ways))
+      q = q + "SELECT ST_AsText(ST_Multi(ST_Collect(way))),MAX(ST_SRID(way)) FROM %s_polygon WHERE osm_id IN (%s)" % (prefix, ",".join(ways))
     elif pgtype == 'osm-simple':
-      q = "SELECT ST_AsText(linestring),ST_SRID(linestring) FROM ways WHERE id IN (%s)" % (",".join(ways))
+      q = "SELECT ST_AsText(ST_Multi(ST_Collect(linestring))),MAX(ST_SRID(linestring)) FROM ways WHERE id IN (%s)" % (",".join(ways))
     cc2.execute(q)
     geom = None
-    while True:
-      row = cc2.fetchone()
-      if not row:
-        break
-      wkt, srid = row
+    row = cc2.fetchone()
+    if row:
+      geom, srid = row
       if not srid:
         if warns > 0:
-          print "Way id=%d geometry is invalid, try fix it" % osm_id
-        rwarns.append("Way id=%d geometry is invalid, try fix it" % osm_id)
+          print "Route id=%d geometry is invalid, try fix it" % id
+        rwarns.append("Geometry is invalid, try fix it" % id)
         continue
-      try:
-        wayg = fromwkt(wkt)
-      except RuntimeError:
-        print "Error create geom, skipping way: osm_id=%d, wkt=%s, srid=%d" % (osm_id, wkt, srid)
-        continue
-      if not geom:
-        geom = wayg
-      else:
-        geom = geom.union(wayg)
-    #print "ref=%s geom=%s" % (ref, towkt(geom))
-    #geom = geom.lineMerge()
-    #print "ref=%s type=%s geom=%s" % (ref, geom.geomType(), towkt(geom))
+    else:
+      if warns > 0:
+        print "Route id=%d creating geometry failed"
+      rwarns.append("Creating geometry failed")
 
   if checkvalid and new and len(ways):
     if pgtype == 'pgsql':
@@ -424,13 +410,6 @@ while True:
   if storeroutes:
     q = None
     if georoutes and len(ways) and geom:
-      try:
-        geom = towkt(geom)
-        geom = "ST_GeomFromText('%s',%d)" % (geom, srid)
-      except TypeError:
-        print "Something wrong while processing geometry for master_id=%s route_id=%s; resetting geometry to NULL" % (master, id)
-        rwarns.append("Something wrong while processing geometry; resetting geometry to NULL")
-        geom = None
       if checkvalid:
         rwarns = "\n".join(rwarns)
       else:
@@ -438,6 +417,7 @@ while True:
       if not master:
         master = 0
         mref = ""
+      geom = "ST_GeomFromText(%s,%d)" % (sqlesc(geom), srid)
       q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%s,%d)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), geom, new)
     
     # old route or route without geometry
