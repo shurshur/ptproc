@@ -8,7 +8,9 @@ CREATE TABLE pt_routes (
   mref TEXT,
   rref TEXT,
   valid INT,
-  warns TEXT
+  warns TEXT,
+  route_from TEXT,
+  route_to TEXT
 );
 ALTER TABLE pt_routes ADD way GEOMETRY;
 ALTER TABLE pt_routes ADD newroute INT NOT NULL DEFAULT 0;

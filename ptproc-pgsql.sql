@@ -8,7 +8,9 @@ CREATE TABLE pt_routes (
   mref TEXT,
   rref TEXT,
   valid INT,
-  warns TEXT
+  warns TEXT,
+  route_from TEXT,
+  route_to TEXT
 );
 CREATE OR REPLACE FUNCTION tags2pairs(a text[]) RETURNS text[] AS $SQL$
     SELECT array_agg($1[i] || '=' || $1[i+1])

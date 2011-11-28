@@ -222,6 +222,15 @@ while True:
   if rtype not in route_types:
     continue
 
+  try:
+    rfrom = sqlesc(tags["from"])
+  except:
+    rfrom = "NULL"
+  try:
+    rto = sqlesc(tags["to"])
+  except:
+    rto = "NULL"
+
   # если route является частью какого-то route_master, то он новый
   try:
     rm[id]
@@ -418,7 +427,7 @@ while True:
         master = 0
         mref = ""
       geom = "ST_GeomFromText(%s,%d)" % (sqlesc(geom), srid)
-      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%s,%d)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), geom, new)
+      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute, route_from, route_to) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%s,%d,%s,%s)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), geom, new, rfrom, rto)
     
     # old route or route without geometry
     if not q:
@@ -429,7 +438,7 @@ while True:
       if not master:
         master = 0
         mref = ""
-      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, newroute) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%d)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), new)
+      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, newroute, route_from, route_to) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%d,%s,%s)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), new, rfrom, rto)
     
     cu.execute(q)
 
