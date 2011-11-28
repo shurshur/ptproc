@@ -88,6 +88,7 @@ for otype in ["node", "way"]:
 
 if storeroutes:
   cu.execute("DELETE FROM %s_routes" % ptprefix)
+  cu.execute("DELETE FROM %s_stops" % ptprefix)
 
 # route masters
 rm = {}
@@ -284,6 +285,8 @@ while True:
     n2 = 0
     rwarns = []
 
+  seq = 0
+
   for i in range(0,len(members)/2):
     mkey = members[2*i]
     mid = int(mkey[1:])
@@ -314,6 +317,9 @@ while True:
           lref.sort(cmp=ptrefcmp)
           oref = ", ".join(lref)
       refs[mkey][rtype] = oref
+      if new and mrole in new_platform_roles:
+        seq = seq + 1
+        cu.execute("INSERT INTO %s_stops (route_id, seq, osm_id, osm_type) VALUES (%d, %d, %s, '%s')" % (ptprefix, id, seq, mid, mtype))
     elif mtype == "n":
       if not (new and (mrole in new_stop_roles)):
         if checkvalid:

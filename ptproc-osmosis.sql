@@ -14,3 +14,11 @@ CREATE TABLE pt_routes (
 );
 ALTER TABLE pt_routes ADD way GEOMETRY;
 ALTER TABLE pt_routes ADD newroute INT NOT NULL DEFAULT 0;
+CREATE TABLE pt_stops (
+  route_id bigint not null,
+  seq int not null,
+  osm_id bigint not null,
+  osm_type char not null,
+  name text,
+  point geometry
+);
