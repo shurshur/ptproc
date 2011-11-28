@@ -354,7 +354,7 @@ while True:
       if not srid:
         if warns > 0:
           print "Route id=%d geometry is invalid, try fix it" % id
-        rwarns.append("Geometry is invalid, try fix it" % id)
+        rwarns.append("Geometry is invalid, try fix it")
         continue
     else:
       if warns > 0:
