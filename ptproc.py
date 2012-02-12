@@ -196,6 +196,8 @@ while True:
     break
   if pgtype == 'pgsql':
     id, _tags, members = row
+    if not members:
+      members = []
     tags = {}
     for i in range(0,len(_tags)/2):
       tags[_tags[2*i]] = _tags[2*i+1]
