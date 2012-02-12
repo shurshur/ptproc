@@ -465,6 +465,10 @@ for mkey in refs.keys():
     otype = "node"
   elif mtype == "w":
     otype = "way"
+  elif mtype == "r":
+    otype = "relation"
+    # чё делать в таких случаях? не представляю пока что...
+    continue
   else:
     raise BaseException("This cannot happen!")
   k = [otype + "_id"]
