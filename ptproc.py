@@ -98,6 +98,45 @@ count_rm = 0
 # счётчик новых route как мемберов route_master
 count_rn = 0
 
+# извлечение stop_area
+sa = {}
+if pgtype == 'pgsql':
+  q="SELECT id,tags,members FROM %s_rels WHERE 'public_transport=stop_area'=ANY(tags2pairs(tags))" % prefix
+elif pgtype == 'osm-simple':
+  print "stop_area is not supported now for pgtype=osm-simple"
+else:
+  raise ArgumentError("invalid pgtype")
+
+cc.execute(q)
+
+while True:
+  row = cc.fetchone()
+  if not row:
+    break
+  if pgtype == 'pgsql':
+    id, _tags, members = row
+    tags = {}
+    for i in range(0,len(_tags)/2):
+      tags[_tags[2*i]] = _tags[2*i+1]
+  elif pgtype == 'osm-simple':
+    id, tags, _members = row
+    members = {}
+    for i in range(0,len(_members)):
+      mtmp = _members[i].split(":")
+      mkey = mtmp[0]
+      mrole = ":".join(mtmp[1:])
+      members[2*i] = mkey
+      members[2*i+1] = mrole
+
+  try:
+    name = tags["name"]
+  except:
+    name = "(null)"
+  # TODO брать name из stop/platform
+  sa[id] = {"name": name}
+
+print "stop_areas: %d" % len(sa)
+
 # сначала извлечём все route_master
 if pgtype == 'pgsql':
   q="SELECT id,tags,members FROM %s_rels WHERE 'type=route_master'=ANY(tags2pairs(tags))" % prefix
@@ -340,10 +379,15 @@ while True:
         print "Warning: route relation %d is new and has non-empty role %s for way %d" % (id, mrole, mid)
     elif mtype == "r":
       if checkvalid:
-        valid = 0
-        rwarns.append("Relation member %d (role=\"%s\") in route relation %d" % (mid, mrole, id))
-      if warns > 0:
-        print "Warning: route relation %d has relation member %d" % (id, mid)
+        if mrole not in new_stop_roles:
+          valid = 0
+          rwarns.append("Non-stop role \"%s\" for relation member %d in route relation %d" % (mrole, mid, id))
+        else:
+          try:
+            sa[mid]
+          except:
+            valid = 0
+            rwarns.append("Relation member %d (role=\"%s\") in route relation %d should be stop_area" % (mid, mrole, id))
     else:
       raise BaseException("This cannot happen!")
 
