@@ -437,7 +437,8 @@ while True:
     else:
       raise BaseException("This cannot happen!")
 
-  if georoutes and len(ways):
+  # если ptdata=None, значит, результат будет записан в отдельную базу и нужно извлечь геометрию в текстовом виде
+  if not ptdata and georoutes and len(ways):
     if pgtype == 'pgsql':
       q = "SELECT ST_AsText(ST_Multi(ST_Collect(way))),MAX(ST_SRID(way)) FROM %s_line WHERE osm_id IN (%s)" % (prefix, ",".join(ways))
       q = q + " UNION "
@@ -516,7 +517,11 @@ while True:
 
   if storeroutes:
     q = None
-    if georoutes and len(ways) and geom:
+    # два варианта:
+    #  ptdata=None и геометрию будем копировать запросом в пределах базы
+    #  ptdata!=None и geom!=None, тогда геометрию берём в виде текста, извлечённую ранее
+    # третий вариант - когда геометрии нет - будет далее
+    if georoutes and len(ways) and ((geom and ptdata) or (not ptdata)):
       if checkvalid:
         rwarns = "\n".join(rwarns)
       else:
@@ -524,10 +529,14 @@ while True:
       if not master:
         master = 0
         mref = ""
-      geom = "ST_GeomFromText(%s,%d)" % (sqlesc(geom), srid)
-      q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute, route_from, route_to) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%s,%d,%s,%s)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), geom, new, rfrom, rto)
+      if ptdata:
+        geom = "ST_GeomFromText(%s,%d)" % (sqlesc(geom), srid)
+        q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute, route_from, route_to) VALUES (%s,%s,'%s',%s,%s,%s,%d,%s,%s,%d,%s,%s)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), geom, new, rfrom, rto)
+      else:
+        geom = "ST_LineMerge(ST_Collect(way)) AS way"
+        q = "INSERT INTO %s_routes (master_id, route_id, route, ref, rref, mref, valid, warns, way, newroute, route_from, route_to) SELECT %s,%s,'%s',%s,%s,%s,%d,%s,%s,%d,%s,%s FROM %s_line WHERE osm_id IN (%s)" % (ptprefix, master, id, rtype, sqlesc(ref), sqlesc(mref), sqlesc(tref), valid, sqlesc(rwarns), geom, new, rfrom, rto, prefix, ",".join(ways))
     
-    # old route or route without geometry
+    # route without geometry
     if not q:
       if checkvalid:
         rwarns = "\n".join(rwarns)
