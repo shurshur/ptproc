@@ -133,7 +133,28 @@ while True:
   except:
     name = "(null)"
   # TODO брать name из stop/platform
-  sa[id] = {"name": name}
+
+  if not members:
+    members = []
+
+  stop = None
+  platform = None
+  for i in range(0,len(members)/2):
+    mkey = members[2*i]
+    mid = int(mkey[1:])
+    mtype = mkey[0] # n = node, w = way, r = relation
+    mrole = members[2*i+1]
+    if mrole in new_stop_roles:
+      1 #FIXME TODO
+    elif mrole in new_platform_roles:
+      if platform:
+        continue # use only first platform
+      platform = {"type": mtype, "id": mid}
+    else:
+      1 #FIXME TODO
+
+  sa[id] = {"name": name, "platform": platform}
+
 
 print "stop_areas: %d" % len(sa)
 
@@ -388,6 +409,31 @@ while True:
           except:
             valid = 0
             rwarns.append("Relation member %d (role=\"%s\") in route relation %d should be stop_area" % (mid, mrole, id))
+          try:
+            p = sa[mid]["platform"]
+            mkey = p["type"] + p["id"]
+            try:
+              refs[mkey]
+            except:
+              refs[mkey] = {}
+            try:
+              oref = refs[mkey][rtype]
+            except:
+              oref = None
+            if not oref:
+              oref = ref
+            else:
+              lref = re.split(r'\s*,\s*', oref)
+              if ref not in lref:
+                lref.append(ref)
+                lref.sort(cmp=ptrefcmp)
+                oref = ", ".join(lref)
+            refs[mkey][rtype] = oref
+            if new and mrole in new_platform_roles:
+              seq = seq + 1
+              cu.execute("INSERT INTO %s_stops (route_id, seq, osm_id, osm_type) VALUES (%d, %d, %s, '%s')" % (ptprefix, id, seq, mid, mtype))
+          except:
+            rwarns.append("No platform node in stop_area relation \"%d\"" % mid)
     else:
       raise BaseException("This cannot happen!")
 
