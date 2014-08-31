@@ -23,6 +23,7 @@ route_types = ["bus", "trolleybus", "tram", "share_taxi"]
 old_stop_roles = ["stop", "forward:stop", "backward:stop", "forward_stop", "backward_stop"]
 new_stop_roles = ["stop", "stop_exit_only", "stop_entry_only" ]
 new_platform_roles = ["platform", "platform_exit_only", "platform_entry_only" ]
+old_way_roles = ["forward", "backward", ""]
 
 # сравнение двух номеров маршрутов
 # сравниваются префиксы как числа, или как строки, а если равны -
@@ -355,11 +356,11 @@ while True:
     mtype = mkey[0] # n = node, w = way, r = relation
     mrole = members[2*i+1]
 
-    if (checkvalid or georoutes) and mtype == "w":
+    if (checkvalid or georoutes) and (mtype == "w" and ((new and mrole=="") or (not new and mrole in old_way_roles))):
       ways.append(str(mid))
 
     # для новых маршрутов остановка должна одну из ролей new_platform_roles, для старых - одну из old_stop_roles
-    if (mtype == "n" and (not new and (mrole in old_stop_roles)) or (new and (mrole in new_platform_roles))) or mtype == "w":
+    if (mtype == "n" and ((not new and (mrole in old_stop_roles)) or (new and (mrole in new_platform_roles)))) or (mtype == "w" and not new and (mrole in old_way_roles)) or (mtype == "w" and new and mrole == ""):
       if debug > 0:
         print "%d: new %s %d on %s route %s" % (id, otype, mid, rtype, ref)
       try:
@@ -398,6 +399,12 @@ while True:
         rwarns.append("Non-empty role for way %d (role=\"%s\") in new route relation %d" % (mid, mrole, id))
       if warns > 0:
         print "Warning: route relation %d is new and has non-empty role %s for way %d" % (id, mrole, mid)
+    elif mtype == "w" and not new and mrole not in old_way_roles:
+      if checkvalid:
+        valid = 0
+        rwarns.append("Invalid role for way %d (role=\"%s\") in old route relation %d" % (mid, mrole, id))
+      if warns > 0:
+        print "Warning: route relation %d is old and has invalid role %s for way %d" % (id, mrole, mid)
     elif mtype == "r":
       if checkvalid:
         if mrole not in new_stop_roles:
@@ -437,6 +444,7 @@ while True:
     else:
       raise BaseException("This cannot happen!")
 
+  geom = None
   # если ptdata=None, значит, результат будет записан в отдельную базу и нужно извлечь геометрию в текстовом виде
   if not ptdata and georoutes and len(ways):
     if pgtype == 'pgsql':
@@ -446,7 +454,6 @@ while True:
     elif pgtype == 'osm-simple':
       q = "SELECT ST_AsText(ST_Multi(ST_Collect(linestring))),MAX(ST_SRID(linestring)) FROM ways WHERE id IN (%s)" % (",".join(ways))
     cc2.execute(q)
-    geom = None
     row = cc2.fetchone()
     if row:
       geom, srid = row
